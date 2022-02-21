@@ -27,10 +27,14 @@ class Database():
     # Deletes the specified table
     """
     def drop_table(self, name):
-        pass
+        for i in (self.tables.__len__):
+            if (self.tables[i].name == name):
+                self.tables.pop(i)
 
     """
     # Returns table with the passed name
     """
     def get_table(self, name):
-        pass
+        for i in (self.tables.__len__):
+            if (self.tables[i].name == name):
+                return self.tables[i]

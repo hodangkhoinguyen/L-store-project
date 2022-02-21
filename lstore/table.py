@@ -14,6 +14,43 @@ class Record:
         self.key = key
         self.columns = columns
 
+class PageRange:
+    
+    def __init__(self):
+        self.base_limit = 16
+        self.num_base = 0
+        self.base_page = []
+        self.tail_page = []
+        
+    def has_capacity(self):
+        if (self.num_base == self.base_limit and not self.base_page[31].has_capacity):
+            return False
+        
+        return True
+    
+class RID:
+    def __init__(self, page_range_number, page_number, slot_number):
+        self.page_range_number = page_range_number
+        self.page_number = page_number
+        self.slot_number = slot_number
+        
+    def __eq__(self, other):
+        if (self.page_range_number == other.page_range_number and self.page_number == other.page_number and self.slot_number == other.slot_number):
+            return True
+        return False
+    
+    def __lt__(self, other):
+        if self.page_range_number < other.page_range_number or (self.page_range_number == other.page_range_number and \
+            (self.page_number < other.page_number or (self.page_number == other.page_number and self.slot_number < other.slot_number))):
+            return True
+        return False
+        
+    def __gt__(self, other):
+        if self.page_range_number > other.page_range_number or (self.page_range_number == other.page_range_number and \
+            (self.page_number > other.page_number or (self.page_number == other.page_number and self.slot_number > other.slot_number))):
+            return True
+        return False
+    
 class Table:
 
     """
@@ -27,6 +64,9 @@ class Table:
         self.num_columns = num_columns
         self.page_directory = {}
         self.index = Index(self)
+        self.page_range = []
+        
+        self.num_records = 0
         pass
 
     def __merge(self):
