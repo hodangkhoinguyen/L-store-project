@@ -1,6 +1,7 @@
-from lstore.table import Table, Record
+from lstore.table import Table, Record, PageRange, RID, INDIRECTION_COLUMN, RID_COLUMN, TIMESTAMP_COLUMN, SCHEMA_ENCODING_COLUMN
 from lstore.index import Index
-
+from lstore.page import Page
+import time
 
 class Query:
     """
@@ -10,7 +11,7 @@ class Query:
     Any query that crashes (due to exceptions) should return False
     """
 
-    def __init__(self, table):
+    def __init__(self, table: Table):
         self.table = table
         pass
 
@@ -28,10 +29,52 @@ class Query:
     # Return True upon succesful insertion
     # Returns False if insert fails for whatever reason
     """
-
+    # INDIRECTION_COLUMN = 0
+    # RID_COLUMN = 1
+    # TIMESTAMP_COLUMN = 2
+    # SCHEMA_ENCODING_COLUMN = 3
     def insert(self, *columns):
         schema_encoding = '0' * self.table.num_columns
-        pass
+        key_column = self.table.key
+        page_range_size = len(self.table.page_range_list)
+        index = 4
+        if (page_range_size == 0 \
+            or (not self.table.page_range_list[page_range_size - 1].has_capacity)):
+            new_page_range = PageRange()
+            indirection_col = [None]
+            rid_col = [RID(page_range_size, 0, 0)]
+            timestamp_col = [int(time.time())]
+            schema_encoding_col = [schema_encoding]
+            base_page = [indirection_col, rid_col, timestamp_col, schema_encoding_col]
+            
+            for i in columns:
+                page = Page()
+                page.write(i)
+                base_page.append(page)
+            new_page_range.base_page_list.append(base_page)
+            self.table.page_range_list.append(new_page_range)
+        elif (self.table.page_range_list[page_range_size-1].base_page_list[self.table.page_range_list[page_range_size-1].getNumBase()-1][4].has_capacity()):
+            base_page = self.table.page_range_list[page_range_size-1].base_page_list[self.table.page_range_list[page_range_size-1].getNumBase()-1]
+            num_records = base_page[index].num_records
+            base_page[INDIRECTION_COLUMN].append(None)
+            base_page[RID_COLUMN].append(RID(page_range_size-1, self.table.page_range_list[page_range_size-1].getNumBase()-1, base_page[index].num_records-1))
+            base_page[TIMESTAMP_COLUMN].append(int(time.time()) )
+            base_page[SCHEMA_ENCODING_COLUMN].append(schema_encoding)
+            
+            for i in columns:
+                base_page[index].write(i)  
+                index += 1
+        else:
+            indirection_col = [None]
+            rid_col = [RID(page_range_size-1, 0, 0)]
+            timestamp_col = [int(time.time())]
+            schema_encoding_col = [schema_encoding]
+            base_page = [indirection_col, rid_col, timestamp_col, schema_encoding_col]
+            for i in columns:
+                page = Page()
+                page.write(i)
+                base_page.append(page)
+            self.table.page_range_list[page_range_size-1].base_page_list.append(base_page)
 
     """
     # Read a record with specified key

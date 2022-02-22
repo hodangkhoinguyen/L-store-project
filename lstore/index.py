@@ -1,13 +1,14 @@
 """
 A data strucutre holding indices for various columns of a table. Key column should be indexd by default, other columns can be indexed through this object. Indices are usually B-Trees, but other data structures can be used as well.
 """
-from lstore.bPlusTree import BplusTree
+from lstore.bPlusTree import BPlusTree
 
 class Index:
 
     def __init__(self, table):
         # One index for each table. All our empty initially.
         self.indices = [None] *  table.num_columns
+        self.table = table
         pass
 
     """
@@ -28,8 +29,10 @@ class Index:
     # optional: Create index on specific column
     """
 
-    def create_index(self, column_number):
-        pass
+    def create_index(self, column_number) -> BPlusTree:
+        tree = BPlusTree(10)
+        
+        return tree
 
     """
     # optional: Drop index of specific column

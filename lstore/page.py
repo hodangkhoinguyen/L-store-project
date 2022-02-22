@@ -13,8 +13,11 @@ class Page:
         
         return False
 
-    def write(self, value):
-        self.num_records += 1
-        self.data[self.num_records]
-        pass
-
+    def write(self, value: int):
+        if (self.has_capacity):
+            start_offset = self.num_records*self.data_size
+            end_offset = self.num_records*self.data_size + self.data_size
+            self.data[start_offset : end_offset] = value.to_bytes(8, 'big')
+            self.num_records += 1
+            return True
+        return False

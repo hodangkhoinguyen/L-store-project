@@ -18,15 +18,20 @@ class PageRange:
     
     def __init__(self):
         self.base_limit = 16
-        self.num_base = 0
-        self.base_page = []
-        self.tail_page = []
+        self.base_page_list = []
+        self.tail_page_list = []
         
     def has_capacity(self):
-        if (self.num_base == self.base_limit and not self.base_page[31].has_capacity):
+        if (self.num_base == self.base_limit and not self.base_page[self.num_base - 1].has_capacity):
             return False
         
         return True
+
+    def getNumBase(self):
+        return len(self.base_page_list)
+    
+    def getNumTail(self):
+        return len(self.tail_page_list)
     
 class RID:
     def __init__(self, page_range_number, page_number, slot_number):
@@ -64,7 +69,7 @@ class Table:
         self.num_columns = num_columns
         self.page_directory = {}
         self.index = Index(self)
-        self.page_range = []
+        self.page_range_list = []
         
         self.num_records = 0
         pass

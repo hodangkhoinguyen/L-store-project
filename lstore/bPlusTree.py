@@ -178,27 +178,27 @@ class BPlusTree(object):
 
         while not isinstance(node, LeafNode):
             node, index = self._find(node, key)
-        print(node.nextLeaf.values)
-        print(node.nextLeaf.nextLeaf.values)
-        print(node.nextLeaf.nextLeaf.nextLeaf.values)
         for i, item in enumerate(node.keys):
             if key == item:
                 return node.values[i]
-
+        
         return None
 
     def locateRange(self, start, end):
         node = self.root
         result = []
-        while not node == None:
-            while not isinstance(node, LeafNode):
-                node, index = self._find(node, start)
-            start = start+1
-        
-        while not node == None:
-            for i in node.values:
-                if (i >= start and i <= end):
-                    result.append(i)
+        while not isinstance(node, LeafNode):
+            node, index = self._find(node, start)
+        isStop = False
+        while node and not isStop:
+            for i, item in enumerate(node.keys):                          
+                if (item >= start and item <= end):
+                    if (not node == None):
+                        result.append(node.values[i])
+                if (item > end):
+                    break  
+                    isStop = True                    
+            node = node.nextLeaf
         return result
         
     def delete(self, key):
@@ -373,22 +373,3 @@ class BPlusTree(object):
         result[0::2] = lst
         return result
 
-
-if __name__ == '__main__':
-    bpt = BPlusTree(order=4)
-
-    # Insert
-    customNo = 10
-    for i in range(customNo):
-        num = randint(i, 5 * i)
-        print(i,num,"\n")
-        bpt.insert(i, num)
-    bpt.printTree()
-    bpt.showAllData()
-    print()
-    print("Hii:",bpt.locateRange(1,5))
-    for i in range(int(customNo / 2)):
-        bpt.delete(i)
-    bpt.printTree()
-    bpt.showAllData()
-    print()
