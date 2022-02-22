@@ -39,4 +39,4 @@ class Index:
     """
 
     def drop_index(self, column_number):
-        pass
+        self.indices[column_number] = None

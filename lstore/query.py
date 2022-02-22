@@ -17,7 +17,7 @@ class Query:
 
     """
     # internal Method
-    # Read a record with specified RID
+    # Read a record with specified primary_key
     # Returns True upon succesful deletion
     # Return False if record doesn't exist or is locked due to 2PL
     """
