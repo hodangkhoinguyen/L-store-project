@@ -184,7 +184,7 @@ class BPlusTree(object):
         
         return None
 
-    def locateRange(self, start, end):
+    def locate_range(self, start, end):
         node = self.root
         result = []
         while not isinstance(node, LeafNode):
