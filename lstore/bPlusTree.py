@@ -181,7 +181,6 @@ class BPlusTree(object):
         for i, item in enumerate(node.keys):
             if key == item:
                 return node.values[i]
-        
         return None
 
     def locate_range(self, start, end):
@@ -211,8 +210,7 @@ class BPlusTree(object):
             return False
 
         index = node.keys.index(key)
-        node.values[index].pop()  # Remove the last inserted data.
-
+        
         if len(node.values[index]) == 0:
             node.values.pop(index)  # Remove the list element.
             node.keys.pop(index)
@@ -237,7 +235,49 @@ class BPlusTree(object):
             if node.isRoot() and not isinstance(node, LeafNode) and len(node.values) == 1:
                 self.root = node.values[0]
                 self.root.parent = None
+    def delete_key_value(self, key, val):
+        node = self.root
 
+        while not isinstance(node, LeafNode):
+            node, parentIndex = self._find(node, key)
+
+        if key not in node.keys:
+            return False
+
+        index = node.keys.index(key)
+        #node.values[index].pop()  # Remove the last inserted data.
+
+        for i in range(len(node.values[index])):
+            if (val == node.values[index][i]):
+                node.values[index].pop(i)
+                break
+        
+            
+        if len(node.values[index]) == 0:
+            node.values.pop(index)  # Remove the list element.
+            node.keys.pop(index)
+
+            while node.isUnderflow() and not node.isRoot():
+                # Borrow attempt:
+                prevSibling = BPlusTree.getPrevSibling(node)
+                nextSibling = BPlusTree.getNextSibling(node)
+                jnk, parentIndex = self._find(node.parent, key)
+
+                if prevSibling and not prevSibling.isNearlyUnderflow():
+                    self._borrowLeft(node, prevSibling, parentIndex)
+                elif nextSibling and not nextSibling.isNearlyUnderflow():
+                    self._borrowRight(node, nextSibling, parentIndex)
+                elif prevSibling and prevSibling.isNearlyUnderflow():
+                    self._mergeOnDelete(prevSibling, node)
+                elif nextSibling and nextSibling.isNearlyUnderflow():
+                    self._mergeOnDelete(node, nextSibling)
+
+                node = node.parent
+
+            if node.isRoot() and not isinstance(node, LeafNode) and len(node.values) == 1:
+                self.root = node.values[0]
+                self.root.parent = None
+                
     @staticmethod
     def _borrowLeft(node: Node, sibling: Node, parentIndex):
         if isinstance(node, LeafNode):  # Leaf Redistribution
@@ -372,4 +412,3 @@ class BPlusTree(object):
         result = [item] * (len(lst) * 2)
         result[0::2] = lst
         return result
-
