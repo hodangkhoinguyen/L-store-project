@@ -23,7 +23,7 @@ class PageRange:
         self.tail_page_list = []
         
     def has_capacity(self):
-        if (self.num_base == self.base_limit and not self.base_page[self.num_base - 1].has_capacity):
+        if (len(self.base_page_list) == self.base_limit and not self.base_page_list[self.base_limit - 1][4].has_capacity()):
             return False
         
         return True
@@ -68,7 +68,8 @@ class Table:
         self.name = name
         self.key = key
         self.num_columns = num_columns
-        self.counter = 0
+        self.counter_base = 0
+        self.counter_tail = 0
         
         """
         page_director:
@@ -79,7 +80,6 @@ class Table:
         self.page_range_list = []
         self.index = Index(self)
         
-        self.num_records = 0
         pass
 
     def __merge(self):

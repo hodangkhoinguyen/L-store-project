@@ -21,3 +21,8 @@ class Page:
             self.num_records += 1
             return True
         return False
+
+    def read(self, offset):
+        start_offset = offset*self.data_size
+        end_offset = offset*self.data_size + self.data_size
+        return int.from_bytes(self.data[start_offset : end_offset], 'big')

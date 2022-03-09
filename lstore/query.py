@@ -1,3 +1,4 @@
+from msilib import schema
 from lstore.table import Table, Record, PageRange, INDIRECTION_COLUMN, RID_COLUMN, TIMESTAMP_COLUMN, SCHEMA_ENCODING_COLUMN
 from lstore.index import Index
 from lstore.page import Page
@@ -23,10 +24,10 @@ class Query:
     """
 
     def delete(self, primary_key):
-        rid = self.table.index.indices[self.table.key].locate(primary_key)
+        rid = self.table.index.indices[self.table.key].locate(primary_key)[0]
         if rid == None:
             return False
-        self.table.index.indices[self.table.key].delete(primary_key)
+        self.table.index.delete(self.table.key, primary_key, rid)
         location = self.table.page_directory[rid]
         """
         location: <- list of informations
@@ -34,8 +35,8 @@ class Query:
         [1] base_page
         [2] slot        
         """
+        self.table.page_range_list[location[0]].base_page_list[location[1]][RID_COLUMN][location[2]] = -1        
         self.table.page_directory.pop(rid)
-        self.table.page_range_list[location[0]].base_page_list[location[1]][RID_COLUMN][location[2]] = -1 
         return True
     """
     # Insert a record with specified columns
@@ -51,7 +52,7 @@ class Query:
         primary_key = columns[key_column]
         
         #check if there is any existing record
-        if (not self.table.index.indices[key_column].locate(primary_key) == None):
+        if (self.table.index.locate(key_column, primary_key) != None):
             return False
         
         schema_encoding = '0' * self.table.num_columns
@@ -61,9 +62,9 @@ class Query:
         if not len(columns) == self.table.num_columns:
             return False
 
-        rid = self.table.counter
+        rid = 'b' + str(self.table.counter_base)
         if (page_range_size == 0 \
-            or (not self.table.page_range_list[page_range_size - 1].has_capacity)):
+            or (not self.table.page_range_list[page_range_size - 1].has_capacity())):
             new_page_range = PageRange()
             new_page_range.path = self.table.name + " page_range " + str(len(self.table.page_range_list) )
             indirection_col = [None]
@@ -81,10 +82,9 @@ class Query:
             self.table.page_range_list.append(new_page_range)
         elif (self.table.page_range_list[page_range_size-1].base_page_list[self.table.page_range_list[page_range_size-1].getNumBase()-1][4].has_capacity()):
             base_page = self.table.page_range_list[page_range_size-1].base_page_list[self.table.page_range_list[page_range_size-1].getNumBase()-1]
-            num_records = base_page[index].num_records
             base_page[INDIRECTION_COLUMN].append(None)
             base_page[RID_COLUMN].append(rid)
-            location = [page_range_size-1, self.table.page_range_list[page_range_size-1].getNumBase()-1, base_page[index].num_records-1]
+            location = [page_range_size-1, self.table.page_range_list[page_range_size-1].getNumBase()-1, base_page[index].num_records]
             base_page[TIMESTAMP_COLUMN].append(int(time.time()) )
             base_page[SCHEMA_ENCODING_COLUMN].append(schema_encoding)
             
@@ -93,7 +93,7 @@ class Query:
                 index += 1
         else:
             indirection_col = [None]
-            location = [page_range_size, 0, 0]
+            location = [page_range_size-1, self.table.page_range_list[page_range_size-1].getNumBase(), 0]
             rid_col = [rid]
             timestamp_col = [int(time.time())]
             schema_encoding_col = [schema_encoding]
@@ -104,9 +104,9 @@ class Query:
                 base_page.append(page)
             self.table.page_range_list[page_range_size-1].base_page_list.append(base_page)
         
-        for i in range(self.table.num_columns):
-            self.table.index.indices[i].insert(columns[i], rid)
-        self.table.counter += 1
+        
+        self.table.index.insert(key_column, primary_key, rid)
+        self.table.counter_base += 1
         self.table.page_directory[rid] = location
         return True
 
@@ -121,7 +121,39 @@ class Query:
     """
 
     def select(self, index_value, index_column, query_columns):
-        pass
+        rid_list = self.table.index.locate(index_column, index_value)
+        
+        if (rid_list == None):
+            return False
+        
+        result = []
+        
+        for rid in rid_list:
+            if (rid in self.table.page_directory):
+                location = self.table.page_directory[rid]
+                base_page = self.table.page_range_list[location[0]].base_page_list[location[1]]
+                columns = []
+                for i in range(self.table.num_columns):
+                    schema_encoding = base_page[SCHEMA_ENCODING_COLUMN][location[2]]
+                    no_update_schema = '0' * self.table.num_columns
+                    
+                    if (schema_encoding != no_update_schema):                        
+                        rid_tail = base_page[INDIRECTION_COLUMN][location[2]]
+                        location_tail = self.table.page_directory[rid_tail]
+                        tail_page = self.table.page_range_list[location_tail[0]].tail_page_list[location_tail[1]]
+                            
+                    if (query_columns[i] == 1):
+                        if schema_encoding[i] == '0':
+                            columns.append(base_page[i+4].read(location[2]))
+                        else:
+                            columns.append(tail_page[i+4].read(location_tail[2]))
+                    else:
+                        columns.append(None)
+                
+                record = Record(rid, self.table.key, columns)
+                result.append(record)
+        return result
+            
     """
     # Update a record with specified key and columns
     # Returns True if update is succesful
@@ -129,10 +161,71 @@ class Query:
     """
 
     def update(self, primary_key, *columns):
-        rid = self.table.index.indices[self.table.key].locate(primary_key)
-        if rid == None:
+        rid_list = self.table.index.indices[self.table.key].locate(primary_key)
+        if rid_list == None or len(columns) != self.table.num_columns:
             return False
-
+        
+        rid = rid_list[0]
+        location = self.table.page_directory[rid]
+        base_page = self.table.page_range_list[location[0]].base_page_list[location[1]]
+        indirection = base_page[INDIRECTION_COLUMN][location[2]]
+        schema_encoding = base_page[SCHEMA_ENCODING_COLUMN][location[2]]
+        rid_tail = 't' + str(self.table.counter_tail)       
+        base_page[INDIRECTION_COLUMN][location[2]] = rid_tail
+        
+        if (indirection == None):
+            indirection = rid[0]
+            
+        current_page_range = self.table.page_range_list[location[0]]
+        time_stamp = int(time.time())
+        if (current_page_range.getNumTail() == 0 or not current_page_range.tail_page_list[current_page_range.getNumTail()-1][4].has_capacity()):
+            location_tail = [location[0], current_page_range.getNumTail(), 0]
+            current_page_range.tail_page_list.append([[],[],[],[]])
+            tail_page = current_page_range.tail_page_list[current_page_range.getNumTail()-1]
+            tail_page[RID_COLUMN].append(rid_tail)
+            tail_page[INDIRECTION_COLUMN].append(indirection)
+            tail_page[TIMESTAMP_COLUMN].append(time_stamp)
+            schema = ""
+            for i in range(self.table.num_columns):
+                tail_page.append(Page())
+                if (columns[i] != None):
+                    schema += '1'
+                    tail_page[i+4].write(columns[i])
+                else:
+                    schema += schema_encoding[i]
+                    if indirection[0] == 'b':
+                        tail_page[i+4].write(base_page[i+4].read(location[2]))
+                    else:
+                        location_previous_tail = self.table.page_directory[indirection]
+                        tail_page[i+4].write(current_page_range.tail_page_list[location_previous_tail[1]][i+4].read(location_previous_tail[2]))  
+            schema_encoding = schema          
+            tail_page[SCHEMA_ENCODING_COLUMN].append(schema_encoding)
+            
+        else:
+            location_tail = [location[0], current_page_range.getNumTail()-1, current_page_range.tail_page_list[current_page_range.getNumTail()-1][4].num_records]
+            tail_page = current_page_range.tail_page_list[current_page_range.getNumTail()-1]
+            tail_page[RID_COLUMN].append(rid_tail)
+            tail_page[INDIRECTION_COLUMN].append(indirection)
+            tail_page[TIMESTAMP_COLUMN].append(time_stamp)
+            schema = ""
+            for i in range(self.table.num_columns):
+                tail_page.append(Page())
+                if (columns[i] != None):
+                    schema += '1'
+                    tail_page[i+4].write(columns[i])
+                else:
+                    schema += schema_encoding[i]
+                    if indirection[0] == 'b':
+                        tail_page[i+4].write(base_page[i+4].read(location[2]))
+                    else:
+                        location_previous_tail = self.table.page_directory[indirection]
+                        tail_page[i+4].write(current_page_range.tail_page_list[location_previous_tail[1]][i+4].read(location_previous_tail[2]))  
+            schema_encoding = schema          
+            tail_page[SCHEMA_ENCODING_COLUMN].append(schema_encoding)
+                
+        self.table.page_directory[rid_tail] = location_tail        
+        base_page[SCHEMA_ENCODING_COLUMN][location[2]] = schema_encoding        
+        self.table.counter_tail += 1
         
         return True
     """
@@ -145,11 +238,18 @@ class Query:
     """
 
     def sum(self, start_range, end_range, aggregate_column_index):
-        rid_list = self.table.index.indices[self.table.key].locate_range(start_range, end_range)
-        if len(rid_list) == 0:
+        rid_list = self.table.index.locate_range(start_range, end_range, self.table.key)
+        if (rid_list == None):
             return False
+        result = 0
+        for i in rid_list:
+            rid = i[0]
+            if (rid in self.table.page_directory):
+                location = self.table.page_directory[rid]
+                base_page = self.table.page_range_list[location[0]].base_page_list[location[1]]
+                result += base_page[aggregate_column_index+4].read(location[2])
         
-        return True
+        return result
 
     """
     incremenets one column of the record
