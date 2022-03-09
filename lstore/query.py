@@ -247,8 +247,14 @@ class Query:
             if (rid in self.table.page_directory):
                 location = self.table.page_directory[rid]
                 base_page = self.table.page_range_list[location[0]].base_page_list[location[1]]
-                result += base_page[aggregate_column_index+4].read(location[2])
-        
+                if (base_page[SCHEMA_ENCODING_COLUMN][location[2]][aggregate_column_index] == '0'):
+                    result += base_page[aggregate_column_index+4].read(location[2])
+                else:
+                    rid_tail = base_page[INDIRECTION_COLUMN][location[2]]
+                    location_tail = self.table.page_directory[rid_tail]
+                    tail_page = self.table.page_range_list[location_tail[0]].tail_page_list[location_tail[1]]
+                    result += tail_page[aggregate_column_index+4].read(location_tail[2])
+                    
         return result
 
     """
