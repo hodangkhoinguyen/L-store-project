@@ -7,10 +7,9 @@ class Index:
     def __init__(self, table):
         # One index for each table. All our empty initially.
         self.indices = [None] *  table.num_columns
-        self.table = table
+        self.table = table        
+        self.indices[self.table.key] = self.create_index(self.table.key)
         
-        for i in range(len(self.indices)):
-            self.indices[i] = self.create_index(i)
 
     """
     # returns the location of all records with the given value on column "column"
@@ -40,7 +39,7 @@ class Index:
             for base_page in page_range.base_page_list:
                 for i in range (len(base_page[0])):
                     tree.insert(base_page[4+column_number][i],base_page[1][i])
-        return tree
+        self.indices[column_number] = tree
 
     """
     # optional: Drop index of specific column
