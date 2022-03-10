@@ -62,3 +62,12 @@ class Index:
     def delete(self, column_number, value, rid):
         if (self.indices[column_number] != None):
             self.indices[column_number].delete_key_value(value, rid)
+
+    def index_key(self):
+        tree = BPlusTree(10)
+        key = self.table.key
+        for page_range in self.table.page_range_list:
+            for base_page in page_range.base_page_list:
+                for i in range (len(base_page[0])):
+                    tree.insert(base_page[4+key][i],base_page[1][i])
+        self.indices[key] = tree

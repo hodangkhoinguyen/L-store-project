@@ -1,5 +1,6 @@
+import threading
 from lstore.index import Index
-from time import time
+from threading import Timer
 
 INDIRECTION_COLUMN = 0
 RID_COLUMN = 1
@@ -21,6 +22,9 @@ class PageRange:
         self.base_limit = 16
         self.base_page_list = []
         self.tail_page_list = []
+        self.dirty = False
+        self.has_updated = None
+        self.recent_tail = None
         
     def has_capacity(self):
         if (len(self.base_page_list) == self.base_limit and not self.base_page_list[self.base_limit - 1][4].has_capacity()):
@@ -34,29 +38,6 @@ class PageRange:
     def getNumTail(self):
         return len(self.tail_page_list)
     
-# class RID:
-#     def __init__(self, page_range_number, page_number, slot_number):
-#         self.page_range_number = page_range_number
-#         self.page_number = page_number
-#         self.slot_number = slot_number
-        
-#     def __eq__(self, other):
-#         if (self.page_range_number == other.page_range_number and self.page_number == other.page_number and self.slot_number == other.slot_number):
-#             return True
-#         return False
-    
-#     def __lt__(self, other):
-#         if self.page_range_number < other.page_range_number or (self.page_range_number == other.page_range_number and \
-#             (self.page_number < other.page_number or (self.page_number == other.page_number and self.slot_number < other.slot_number))):
-#             return True
-#         return False
-        
-#     def __gt__(self, other):
-#         if self.page_range_number > other.page_range_number or (self.page_range_number == other.page_range_number and \
-#             (self.page_number > other.page_number or (self.page_number == other.page_number and self.slot_number > other.slot_number))):
-#             return True
-#         return False
-    
 class Table:
 
     """
@@ -68,9 +49,11 @@ class Table:
         self.name = name
         self.key = key
         self.num_columns = num_columns
-        self.counter_base = 0
-        self.counter_tail = 0
-        
+        self.counter_base = 1
+        self.counter_tail = 1
+        self.thread = threading.Thread(target = timer, args=(self,))
+        self.thread.setDaemon(True)
+        self.thread.start()
         """
         page_director:
         key: rid = counter
@@ -84,5 +67,38 @@ class Table:
 
     def __merge(self):
         print("merge is happening")
-        pass
- 
+        for page_range in self.page_range_list:
+            recent_tail = page_range.recent_tail
+            new_updated = page_range.recent_tail
+            
+            #check if there's any recent updates that haven't been merged
+            if page_range.has_updated != recent_tail: 
+                merge_base_page_list = page_range.base_page_list.deepcopy()           
+                
+                for i in range(len(merge_base_page_list)):
+                    merge_base_page = merge_base_page_list[i]
+                    
+                    for j, rid in enumerate(merge_base_page[RID_COLUMN], 0):
+                        merge_base_page[TIMESTAMP_COLUMN][j] = int(time.time())
+                        rid_tail = merge_base_page[INDIRECTION_COLUMN][j]
+                        
+                        #check if this record has any update or ever merged
+                        if (rid_tail != None and int(rid_tail[1:]) <= int(page_range.has_updated[1:])):
+                            if (rid != -1):                            
+                                for k in range(self.table.num_columns):                                
+                                    location_tail = self.page_directory[rid_tail]
+                                    schema_encoding = merge_base_page[SCHEMA_ENCODING_COLUMN][j]
+                                    if schema_encoding[k] == 1:
+                                        merge_base_page[4+k][j].write(page_range.tail_page_list[location_tail[0]].tail_page_list[location_tail[1]][4+k].read(location_tail[2]))
+                    
+                    merge_base_page[INDIRECTION_COLUMN] = page_range.base_page_list[i][INDIRECTION_COLUMN].copy()
+                    merge_base_page[SCHEMA_ENCODING_COLUMN] = page_range.base_page_list[i][SCHEMA_ENCODING_COLUMN].copy()
+                page_range.base_page_list = merge_base_page_list 
+            page_range.has_updated = new_updated
+                
+class RepeatTimer(Timer):
+    def run(self):
+        while not self.finished.wait(self.interval):
+            self.function(*self.args, **self.kwargs)        
+    
+    
