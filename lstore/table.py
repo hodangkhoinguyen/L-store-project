@@ -1,7 +1,7 @@
 import threading
 from lstore.index import Index
 from threading import Timer
-
+import time
 INDIRECTION_COLUMN = 0
 RID_COLUMN = 1
 TIMESTAMP_COLUMN = 2
@@ -51,19 +51,16 @@ class Table:
         self.num_columns = num_columns
         self.counter_base = 1
         self.counter_tail = 1
-        self.thread = threading.Thread(target = timer, args=(self,))
-        self.thread.setDaemon(True)
-        self.thread.start()
         """
         page_director:
         key: rid = counter
         value: [page_range_number, base_page_number, slot_number]
         """
+        self.db = None
         self.page_directory = {}        
         self.page_range_list = []
+        self.lock = []
         self.index = Index(self)
-        
-        pass
 
     def __merge(self):
         print("merge is happening")
@@ -96,9 +93,8 @@ class Table:
                 page_range.base_page_list = merge_base_page_list 
             page_range.has_updated = new_updated
                 
-class RepeatTimer(Timer):
-    def run(self):
-        while not self.finished.wait(self.interval):
-            self.function(*self.args, **self.kwargs)        
+    def timer(self):
+        threading.Thread(self.__merge())
     
     
+

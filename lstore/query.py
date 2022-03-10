@@ -24,11 +24,19 @@ class Query:
     """
 
     def delete(self, primary_key):
-        rid = self.table.index.indices[self.table.key].locate(primary_key)[0]
+        rid = self.table.index.indices[self.table.key].locate(primary_key)
+        
         if rid == None:
             return False
-        self.table.index.delete(self.table.key, primary_key, rid)
+        rid = rid[0]
         location = self.table.page_directory[rid]
+        index_in_bufferpool = self.table.db.use_bufferpool(self.table.page_range_list[location[0]])
+        if (index_in_bufferpool == -1):
+            return False
+        
+        self.table.db.dirty[index_in_bufferpool] = True
+        
+        
         """
         location: <- list of informations
         [0] page_range
@@ -48,6 +56,8 @@ class Query:
     # TIMESTAMP_COLUMN = 2
     # SCHEMA_ENCODING_COLUMN = 3
     def insert(self, *columns):
+        if not len(columns) == self.table.num_columns:
+            return False
         key_column = self.table.key
         primary_key = columns[key_column]
         
@@ -59,14 +69,20 @@ class Query:
         
         page_range_size = len(self.table.page_range_list)
         index = 4
-        if not len(columns) == self.table.num_columns:
-            return False
 
         rid = 'b' + str(self.table.counter_base)
         if (page_range_size == 0 \
             or (not self.table.page_range_list[page_range_size - 1].has_capacity())):
             new_page_range = PageRange()
-            new_page_range.path = self.table.name + " page_range " + str(len(self.table.page_range_list) )
+            new_page_range.path = self.table.name + " page_range " + str(len(self.table.page_range_list) )            
+            self.table.page_range_list.append(new_page_range)
+            
+            index_in_bufferpool = self.table.db.use_bufferpool(new_page_range)
+            if (index_in_bufferpool == -1):
+                return False
+            
+            self.table.db.dirty[index_in_bufferpool] = True
+            
             indirection_col = [None]
             location = [page_range_size, 0, 0]
             rid_col = [rid]
@@ -79,8 +95,13 @@ class Query:
                 page.write(i)
                 base_page.append(page)
             new_page_range.base_page_list.append(base_page)
-            self.table.page_range_list.append(new_page_range)
         elif (self.table.page_range_list[page_range_size-1].base_page_list[self.table.page_range_list[page_range_size-1].getNumBase()-1][4].has_capacity()):
+            index_in_bufferpool = self.table.db.use_bufferpool(self.table.page_range_list[page_range_size-1])
+            if (index_in_bufferpool == -1):
+                return False
+            
+            self.table.db.dirty[index_in_bufferpool] = True
+            
             base_page = self.table.page_range_list[page_range_size-1].base_page_list[self.table.page_range_list[page_range_size-1].getNumBase()-1]
             base_page[INDIRECTION_COLUMN].append(None)
             base_page[RID_COLUMN].append(rid)
@@ -92,6 +113,11 @@ class Query:
                 base_page[index].write(i)  
                 index += 1
         else:
+            index_in_bufferpool = self.table.db.use_bufferpool(self.table.page_range_list[page_range_size-1])
+            if (index_in_bufferpool == -1):
+                return False
+            
+            self.table.db.dirty[index_in_bufferpool] = True
             indirection_col = [None]
             location = [page_range_size-1, self.table.page_range_list[page_range_size-1].getNumBase(), 0]
             rid_col = [rid]
@@ -119,7 +145,14 @@ class Query:
     # Returns False if record locked by TPL
     # Assume that select will never be called on a key that doesn't exist
     """
+    def currentValues(self, primary_key):   
+        return self.select(primary_key, self.table.key, [1]*self.table.num_columns)
 
+        # Only for use with the transaction class for now. Retrieves the rid of a record that is affected by transaction
+    def returnRID(self, primary_key):
+        rid = self.table.index.locate(self.table.key, primary_key)
+        return rid
+    
     def select(self, index_value, index_column, query_columns):
         rid_list = self.table.index.locate(index_column, index_value)
         
@@ -131,6 +164,11 @@ class Query:
         for rid in rid_list:
             if (rid in self.table.page_directory):
                 location = self.table.page_directory[rid]
+                index_in_bufferpool = self.table.db.use_bufferpool(self.table.page_range_list[location[0]])
+                if (index_in_bufferpool == -1):
+                    return False
+                
+                self.table.db.dirty[index_in_bufferpool] = True
                 base_page = self.table.page_range_list[location[0]].base_page_list[location[1]]
                 columns = []
                 for i in range(self.table.num_columns):
@@ -167,6 +205,11 @@ class Query:
         
         rid = rid_list[0]
         location = self.table.page_directory[rid]
+        index_in_bufferpool = self.table.db.use_bufferpool(self.table.page_range_list[location[0]])
+        if (index_in_bufferpool == -1):
+            return False
+        
+        self.table.db.dirty[index_in_bufferpool] = True
         base_page = self.table.page_range_list[location[0]].base_page_list[location[1]]
         indirection = base_page[INDIRECTION_COLUMN][location[2]]
         schema_encoding = base_page[SCHEMA_ENCODING_COLUMN][location[2]]
@@ -222,7 +265,7 @@ class Query:
                         tail_page[i+4].write(current_page_range.tail_page_list[location_previous_tail[1]][i+4].read(location_previous_tail[2]))  
             schema_encoding = schema          
             tail_page[SCHEMA_ENCODING_COLUMN].append(schema_encoding)
-                
+        
         self.table.page_directory[rid_tail] = location_tail        
         base_page[SCHEMA_ENCODING_COLUMN][location[2]] = schema_encoding        
         self.table.counter_tail += 1
@@ -244,8 +287,14 @@ class Query:
         result = 0
         for i in rid_list:
             rid = i[0]
+            
             if (rid in self.table.page_directory):
                 location = self.table.page_directory[rid]
+                index_in_bufferpool = self.table.db.use_bufferpool(self.table.page_range_list[location[0]])
+                if (index_in_bufferpool == -1):
+                    return False
+                
+                self.table.db.dirty[index_in_bufferpool] = True
                 base_page = self.table.page_range_list[location[0]].base_page_list[location[1]]
                 if (base_page[SCHEMA_ENCODING_COLUMN][location[2]][aggregate_column_index] == '0'):
                     result += base_page[aggregate_column_index+4].read(location[2])

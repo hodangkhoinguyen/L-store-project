@@ -69,5 +69,5 @@ class Index:
         for page_range in self.table.page_range_list:
             for base_page in page_range.base_page_list:
                 for i in range (len(base_page[0])):
-                    tree.insert(base_page[4+key][i],base_page[1][i])
+                    tree.insert(base_page[4+key].read(i),base_page[1][i])
         self.indices[key] = tree
