@@ -336,7 +336,7 @@ class Query:
                         tail_page[i+4].write(current_page_range.tail_page_list[location_previous_tail[1]][i+4].read(location_previous_tail[2]))  
             schema_encoding = schema          
             tail_page[SCHEMA_ENCODING_COLUMN].append(schema_encoding)
-        
+        current_page_range.recent_tail = rid_tail
         self.table.page_directory[rid_tail] = location_tail        
         base_page[SCHEMA_ENCODING_COLUMN][location[2]] = schema_encoding        
         self.table.counter_tail += 1

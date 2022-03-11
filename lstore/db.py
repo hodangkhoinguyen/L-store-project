@@ -108,6 +108,7 @@ class Database():
         f.write(str(len(self.tables))+"\n")
         for i in range(len(self.tables)):
             table : Table = self.tables[i]
+            table.stopFlag.set()
             page_directory_path = table.name + "_" + "page_directory.json"
             with open(page_directory_path, 'w') as file:
                 json.dump(table.page_directory, file)
@@ -134,6 +135,7 @@ class Database():
             base_page_path = path + " base page " + str(i)
             base_page = page_range.base_page_list[i]
             file.write(base_page_path + "\n")
+            
             metadata = [base_page[0], base_page[1], base_page[2], base_page[3]]
             with open(base_page_path + ".json", 'w') as f:
                 json.dump(metadata, f)
