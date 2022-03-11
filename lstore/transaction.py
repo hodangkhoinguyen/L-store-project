@@ -93,13 +93,13 @@ class Transaction:
 
             # This undos insert with a delete
             if queryName == "insert":    
-                Query(table).delete(args[0])
+                #Query(table).delete(args[0])
                 print("successful insert abort")
                 continue
 
             # This undos update with an update of the original values
             if queryName == "update":    
-                Query(table).update(args[0], originalVal)
+                #Query(table).update(args[0], originalVal)
                 print("successful update abort")
                 continue
 
