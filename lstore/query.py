@@ -1,10 +1,15 @@
 from msilib import schema
 from threading import Lock, RLock
+import threading
 from lstore.table import Table, Record, PageRange, INDIRECTION_COLUMN, RID_COLUMN, TIMESTAMP_COLUMN, SCHEMA_ENCODING_COLUMN
 from lstore.index import Index
 from lstore.page import Page
 import time
+class CustomRLock(threading._PyRLock):
 
+    @property
+    def locked(self):
+        return bool(self._count)
 class Query:
     """
     # Creates a Query object that can perform different queries on the specified table 
@@ -32,7 +37,26 @@ class Query:
         rid = rid[0]
         lock = self.table.lock[rid]
         if lock != None:
-            pass
+            if type(lock) == type(Lock()):
+                if lock.locked():
+                    try:
+                        lock.release()
+                    except:
+                        return False
+                    lock.acquire()
+                else:
+                    lock.acquire()
+            else:
+                if (lock.locked):
+                    return False
+                else:
+                    self.table.lock[rid] = Lock()
+                    lock = self.table.lock[rid]
+                    lock.acquire()
+        else:
+            self.table.lock[rid] = Lock()
+            lock = self.table.lock[rid]
+            lock.acquire()
                 
         location = self.table.page_directory[rid]
         index_in_bufferpool = self.table.db.use_bufferpool(self.table.page_range_list[location[0]])
@@ -139,7 +163,8 @@ class Query:
         self.table.index.insert(key_column, primary_key, rid)
         self.table.counter_base += 1
         self.table.page_directory[rid] = location
-        self.table.lock[rid] = None
+        self.table.lock[rid] = Lock()
+        self.table.lock[rid].acquire()
         return True
 
     """
@@ -172,13 +197,23 @@ class Query:
                 lock = self.table.lock[rid]
                 if lock != None:
                     if type(lock) == type(Lock()):
-                        return False
+                        try:
+                            lock.release()
+                        except:
+                            return []
+                        self.table.lock[rid] = CustomRLock()
+                        lock = self.table.lock[rid]
                     else:
                         lock.acquire()
+                else:
+                    self.table.lock[rid] = CustomRLock()
+                    lock = self.table.lock[rid]
+                    lock.acquire()
+                        
                 location = self.table.page_directory[rid]
                 index_in_bufferpool = self.table.db.use_bufferpool(self.table.page_range_list[location[0]])
                 if (index_in_bufferpool == -1):
-                    return False
+                    return []
                 
                 self.table.db.dirty[index_in_bufferpool] = True
                 base_page = self.table.page_range_list[location[0]].base_page_list[location[1]]
@@ -216,6 +251,30 @@ class Query:
             return False
         
         rid = rid_list[0]
+        
+        lock = self.table.lock[rid]
+        if lock != None:
+            if type(lock) == type(Lock()):
+                if lock.locked():
+                    try:
+                        lock.release()
+                    except:
+                        return False
+                    lock.acquire()
+                else:
+                    lock.acquire()
+            else:
+                if (lock.locked):
+                    return False
+                else:
+                    self.table.lock[rid] = Lock()
+                    lock = self.table.lock[rid]
+                    lock.acquire()
+        else:
+            self.table.lock[rid] = Lock()
+            lock = self.table.lock[rid]
+            lock.acquire()
+            
         location = self.table.page_directory[rid]
         index_in_bufferpool = self.table.db.use_bufferpool(self.table.page_range_list[location[0]])
         if (index_in_bufferpool == -1):
@@ -299,8 +358,31 @@ class Query:
         result = 0
         for i in rid_list:
             rid = i[0]
-            
+            lock = self.table.lock[rid]
+            if lock != None:
+                if type(lock) == type(Lock()):
+                    try:
+                        lock.release()
+                    except:
+                        return False
+                    self.table.lock[rid] = CustomRLock()
+                    lock = self.table.lock[rid]
+                else:
+                    lock.acquire()
+            else:
+                self.table.lock[rid] = CustomRLock()
+                lock = self.table.lock[rid]
+                lock.acquire()
             if (rid in self.table.page_directory):
+                if type(lock) == type(Lock()):
+                    try:
+                        lock.release()
+                    except:
+                        return False
+                    self.table.lock[rid] = CustomRLock()
+                    lock = self.table.lock[rid]
+                else:
+                    lock.acquire()
                 location = self.table.page_directory[rid]
                 index_in_bufferpool = self.table.db.use_bufferpool(self.table.page_range_list[location[0]])
                 if (index_in_bufferpool == -1):
@@ -335,3 +417,4 @@ class Query:
             u = self.update(key, *updated_columns)
             return u
         return False
+
