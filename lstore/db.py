@@ -98,6 +98,7 @@ class Database():
                     table.page_range_list.append(page_range)
                     page_range_file.close()
                 table.index.index_key()
+                table.create_lock()
                 self.tables.append(table)
                         
         pass    
@@ -118,7 +119,8 @@ class Database():
                 f.write(j.path+"\n")
           
         while len(self.bufferpool) > 0:
-            self.write_page_range(self.bufferpool[0])
+            if (self.dirty[0]):
+                self.write_page_range(self.bufferpool[0])
             self.bufferpool.pop(0)
         f.close()
         self.read.close()                

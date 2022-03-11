@@ -59,9 +59,13 @@ class Table:
         self.db = None
         self.page_directory = {}        
         self.page_range_list = []
-        self.lock = []
+        self.lock = {}
         self.index = Index(self)
 
+    def create_lock(self):
+        for key in self.page_directory:
+            if (key[0] == 'b'):
+                self.lock[key] = None
     def __merge(self):
         print("merge is happening")
         for page_range in self.page_range_list:

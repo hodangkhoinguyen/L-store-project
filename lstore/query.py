@@ -1,4 +1,5 @@
 from msilib import schema
+from threading import Lock, RLock
 from lstore.table import Table, Record, PageRange, INDIRECTION_COLUMN, RID_COLUMN, TIMESTAMP_COLUMN, SCHEMA_ENCODING_COLUMN
 from lstore.index import Index
 from lstore.page import Page
@@ -29,6 +30,10 @@ class Query:
         if rid == None:
             return False
         rid = rid[0]
+        lock = self.table.lock[rid]
+        if lock != None:
+            pass
+                
         location = self.table.page_directory[rid]
         index_in_bufferpool = self.table.db.use_bufferpool(self.table.page_range_list[location[0]])
         if (index_in_bufferpool == -1):
@@ -134,6 +139,7 @@ class Query:
         self.table.index.insert(key_column, primary_key, rid)
         self.table.counter_base += 1
         self.table.page_directory[rid] = location
+        self.table.lock[rid] = None
         return True
 
     """
@@ -163,6 +169,12 @@ class Query:
         
         for rid in rid_list:
             if (rid in self.table.page_directory):
+                lock = self.table.lock[rid]
+                if lock != None:
+                    if type(lock) == type(Lock()):
+                        return False
+                    else:
+                        lock.acquire()
                 location = self.table.page_directory[rid]
                 index_in_bufferpool = self.table.db.use_bufferpool(self.table.page_range_list[location[0]])
                 if (index_in_bufferpool == -1):
