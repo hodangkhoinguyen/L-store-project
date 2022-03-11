@@ -7,7 +7,33 @@ RID_COLUMN = 1
 TIMESTAMP_COLUMN = 2
 SCHEMA_ENCODING_COLUMN = 3
 
+class RepeatedTimer(object):
+  def __init__(self, interval, function, *args, **kwargs):
+    self._timer = None
+    self.interval = interval
+    self.function = function
+    self.args = args
+    self.kwargs = kwargs
+    self.is_running = False
+    self.next_call = time.time()
+    self.start()
 
+  def _run(self):
+    self.is_running = False
+    self.start()
+    self.function(*self.args, **self.kwargs)
+
+  def start(self):
+    if not self.is_running:
+      self.next_call += self.interval
+      self._timer = threading.Timer(self.next_call - time.time(), self._run)
+      self._timer.start()
+      self.is_running = True
+
+  def stop(self):
+    self._timer.cancel()
+    self.is_running = False
+    
 class Record:
 
     def __init__(self, rid, key, columns):
@@ -25,6 +51,7 @@ class PageRange:
         self.dirty = False
         self.has_updated = None
         self.recent_tail = None
+        self.thrd = RepeatedTimer(.1, self.printtest)
         
     def has_capacity(self):
         if (len(self.base_page_list) == self.base_limit and not self.base_page_list[self.base_limit - 1][4].has_capacity()):
@@ -99,6 +126,7 @@ class Table:
                 
     def timer(self):
         threading.Thread(self.__merge())
-    
-    
+        
+    def printtest(self):
+        print("hello")
 
