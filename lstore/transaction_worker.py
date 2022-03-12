@@ -13,7 +13,7 @@ class TransactionWorker:
         self.transactions: Transaction = transactions
         self.result = 0
         self.thread = None
-
+        self.sema = threading.Semaphore(value = 5)
 
     """
     Appends t to transactions
@@ -39,9 +39,11 @@ class TransactionWorker:
 
 
     def __run(self):
+        self.sema.acquire()
         for transaction in self.transactions:
             # each transaction returns True if committed or False if aborted
             self.stats.append(transaction.run())
         # stores the number of transactions that committed
         self.result = len(list(filter(lambda x: x, self.stats)))
+        self.sema.release()
 
