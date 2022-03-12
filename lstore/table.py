@@ -91,9 +91,9 @@ class Table:
         self.lock = {}
         self.index = Index(self)
         
-        # self.stopFlag = Event()
-        # thread = MyThread(self.stopFlag, self)
-        # thread.start()
+        self.stopFlag = Event()
+        thread = MyThread(self.stopFlag, self)
+        thread.start()
 
         
     def create_lock(self):
