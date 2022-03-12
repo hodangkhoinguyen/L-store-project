@@ -63,7 +63,7 @@ class Transaction:
             if len(args) == 5:
                 queryName = "insert"
                 originalRID = Query(table).returnRID(args[0])
-                if not originalRID == None:
+                if not originalRID == None and originalRID[0] in table.page_directory:
                     page_directory = table.page_directory[originalRID[0]]
             
             # If op fails, it aborts
@@ -84,30 +84,20 @@ class Transaction:
             #print("in loop")
             (queryName, args, originalRID, table, originalVal, page_directory) = self.queryStack.get()
             
-            lock = table.lock[originalRID[0]]
-            if (type(lock) == type(Lock())):
-                if(lock.locked()):
-                    lock.release()
-            elif lock.locked:
-                lock.release() 
             # This skips select and aggregate ops
             if queryName == "read":
                 continue
 
             # This undos insert with a delete
             if queryName == "insert":    
-                Query(table).revert_insert(originalRID[0])
                 continue
 
             # This undos update with an update of the original values
             if queryName == "update":    
-                Query(table).revert_update(originalRID[0], originalVal)
-                print(originalRID, originalVal)
                 continue
 
             # This undos delete  (not done yet)
             if queryName == "delete":
-                Query(table).revert_delete(originalRID[0], page_directory)
                 continue
 
 
@@ -119,12 +109,6 @@ class Transaction:
         # Emptying out the stacks
         while self.queryStack.empty() == False:
             (queryName, args, originalRID, table, originalVal, page_directory) = self.queryStack.get()
-            lock = table.lock[originalRID[0]]
-            if (type(lock) == type(Lock())):
-                if(lock.locked()):
-                    lock.release()
-            elif lock.locked:
-                lock.release()        
 
         return True
 
