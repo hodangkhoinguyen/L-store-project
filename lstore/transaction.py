@@ -48,7 +48,7 @@ class Transaction:
                     originalVal = saveOriginal
 
             if len(args) == 3:
-                queryName = "skip"
+                queryName = "read"
             
             # This segment gets original RID to be put into stack (not for insert)
             if not len(args) == 5:
@@ -88,7 +88,8 @@ class Transaction:
             print(self.queryStack.qsize())
 
             # This skips select and aggregate ops
-            if queryName == "skip":
+            if queryName == "read":
+                print("successful read abort")
                 continue
 
             # This undos insert with a delete
