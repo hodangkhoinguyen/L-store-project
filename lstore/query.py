@@ -216,12 +216,16 @@ class Query:
                 lock = self.table.lock[rid]
                 if lock != None:
                     if type(lock) == type(Lock()):
-                        try:
-                            lock.release()
-                        except:
-                            return []
-                        self.table.lock[rid] = CustomRLock()
-                        lock = self.table.lock[rid]
+                        if (lock.locked()):
+                            try:
+                                lock.release()
+                            except:
+                                return []
+                            self.table.lock[rid].acquire()
+                        else:
+                            self.table.lock[rid] = CustomRLock()
+                            lock = self.table.lock[rid]
+                            lock.acquire()
                     else:
                         lock.acquire()
                 else:
