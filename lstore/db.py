@@ -3,6 +3,7 @@ import json
 import os
 from lstore.table import Table, PageRange
 from lstore.page import Page
+import threading
 
 def int_keys(ordered_pairs):
         result = {}
@@ -13,7 +14,7 @@ def int_keys(ordered_pairs):
                 pass
             result[key] = value
         return result
-    
+
 class Database():
 
     def __init__(self):
@@ -24,11 +25,12 @@ class Database():
         self.bufferpool = []
         self.dirty = []
         self.bufferpool_limit = 32
-        pass
+
+
 
     # Not required for milestone1
     def open(self, path):
-        if (not os.path.isfile(path)):            
+        if (not os.path.isfile(path)):
             f = open(path, 'w')
             self.path = path
             self.read = open(path, 'r')
@@ -45,7 +47,7 @@ class Database():
                 with open(info[5]) as fi:
                     data = fi.read()
                 table.page_directory = json.loads(data, object_pairs_hook=int_keys)
-                
+
                 #info[6] is the length of page_range_list
                 for j in range(int(info[6])):
                     page_range = PageRange()
@@ -62,8 +64,8 @@ class Database():
                         base_page.append(metadata[1])
                         base_page.append(metadata[2])
                         base_page.append(metadata[3])
-                        
-                        
+
+
                         binary_file = open(base_page_path, 'rb')
                         for l in range(table.num_columns):
                             page = Page()
@@ -72,7 +74,7 @@ class Database():
                             base_page.append(page)
                         binary_file.close()
                         page_range.base_page_list.append(base_page)
-                        
+
                     num_tail = int(page_range_file.readline().strip())
                     for k in range(num_tail):
                         tail_page = []
@@ -84,8 +86,8 @@ class Database():
                         tail_page.append(metadata[1])
                         tail_page.append(metadata[2])
                         tail_page.append(metadata[3])
-                        
-                        
+
+
                         binary_file = open(tail_page_path, 'rb')
                         for l in range(table.num_columns):
                             page = Page()
@@ -94,59 +96,58 @@ class Database():
                             tail_page.append(page)
                         binary_file.close()
                         page_range.tail_page_list.append(tail_page)
-                        
+
                     table.page_range_list.append(page_range)
                     page_range_file.close()
                 table.index.index_key()
-                table.create_lock()
                 self.tables.append(table)
-                        
-        pass    
+        pass
 
     def close(self):
+
+        for x in self.tables:
+            x.thrd.stop()
+
         f = open(self.path, 'w')
         f.write(str(len(self.tables))+"\n")
         for i in range(len(self.tables)):
             table : Table = self.tables[i]
-            # table.stopFlag.set()
             page_directory_path = table.name + "_" + "page_directory.json"
             with open(page_directory_path, 'w') as file:
                 json.dump(table.page_directory, file)
-            
-            info = table.name +"  " + str(table.num_columns) + " " + str(table.key)  + " "  + str(table.counter_base) + " " + str(table.counter_tail) + " " + page_directory_path + " " + str(len(table.page_range_list)) +  "\n" 
+
+            info = table.name +"  " + str(table.num_columns) + " " + str(table.key)  + " "  + str(table.counter_base) + " " + str(table.counter_tail) + " " + page_directory_path + " " + str(len(table.page_range_list)) +  "\n"
             f.write(info)
-            
+
             for j in table.page_range_list:
                 f.write(j.path+"\n")
-          
+
         while len(self.bufferpool) > 0:
-            if (self.dirty[0]):
-                self.write_page_range(self.bufferpool[0])
+            self.write_page_range(self.bufferpool[0])
             self.bufferpool.pop(0)
         f.close()
-        self.read.close()                
+        self.read.close()
 
     def write_page_range(self, page_range: PageRange):
         path = page_range.path
         file = open(path, 'w')
         file.write(str(page_range.getNumBase())+"\n")
-        
+
         for i in range(page_range.getNumBase()):
             base_page_path = path + " base page " + str(i)
             base_page = page_range.base_page_list[i]
             file.write(base_page_path + "\n")
-            
             metadata = [base_page[0], base_page[1], base_page[2], base_page[3]]
             with open(base_page_path + ".json", 'w') as f:
                 json.dump(metadata, f)
-            
+
             binary_file = open(base_page_path, 'wb')
             for j in range(4,len(base_page)):
                 binary_file.write(base_page[j].data)
             binary_file.close()
-        
+
         file.write(str(page_range.getNumTail())+"\n")
-        
+
         for i in range(page_range.getNumTail()):
             tail_page_path = path + " tail page " + str(i)
             tail_page = page_range.tail_page_list[i]
@@ -154,20 +155,20 @@ class Database():
             metadata = [tail_page[0], tail_page[1], tail_page[2], tail_page[3]]
             with open(tail_page_path + ".json", 'w') as f:
                 json.dump(metadata, f)
-            
+
             binary_file = open(tail_page_path, 'wb')
             for j in range(4,len(tail_page)):
                 binary_file.write(tail_page[j].data)
             binary_file.close
         file.close()
 
-    def page_range_in_bufferpool(self, pagerange): 
+    def page_range_in_bufferpool(self, pagerange):
         for i in range(len(self.bufferpool)):
             if (pagerange.path == self.bufferpool[i].path):
                 return i
-        
+
         return -1
-    
+
     def use_bufferpool(self, pagerange):
         index_in_bufferpool = self.page_range_in_bufferpool(pagerange)
         if  index_in_bufferpool != -1:
@@ -181,14 +182,14 @@ class Database():
                 if (True): #this should check if any transaction uses the current page
                     dirty = self.dirty.pop(0)
                     evict_page  = self.bufferpool.pop(0)
-                    
+
                     #write the evicted page onto the file
                     if dirty:
                         self.write_page_range(evict_page)
-                    
+
                     self.dirty.append(False)
                     self.bufferpool.append(pagerange)
-                    
+
                     return self.bufferpool_limit
         return -1
     """
