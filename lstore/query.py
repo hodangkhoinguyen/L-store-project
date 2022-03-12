@@ -215,12 +215,13 @@ class Query:
             if (rid in self.table.page_directory):
                 lock = self.table.lock[rid]
                 if lock != None:
-                    if type(lock) == type(Lock()) and lock.locked():
-                        try:
-                            lock.release()
-                        except:
-                            return []
-                        lock.acquire()
+                    if type(lock) == type(Lock()):
+                        if  lock.locked():
+                            try:
+                                lock.release()
+                            except:
+                                return []
+                            lock.acquire()
                     else:
                         self.table.lock[rid] = CustomRLock()
                         lock = self.table.lock[rid]
