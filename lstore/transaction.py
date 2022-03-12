@@ -29,7 +29,6 @@ class Transaction:
 
     # If you choose to implement this differently this method must still return True if transaction commits or False on abort
     def run(self):
-        #print("query ran")
         for query, args, table in self.queries:
 
             originalVal = []
@@ -72,41 +71,39 @@ class Transaction:
             
             # Stack for aborting is appended if needed
             self.queryStack.put((queryName, args, originalRID, table, originalVal, page_directory))
-            #print("stack appended")
 
         return self.commit()
 
     def abort(self):
         #TODO: do roll-back and any other necessary operations
         
-        #print("aborting")
         
         #If stack of ops that went through is not empty, reverse the damage
         while self.queryStack.empty() == False:
-            #print("in loop")
+            
             queryName, args, originalRID, table, originalVal, page_directory = self.queryStack.get()
-            print(self.queryStack.qsize())
+            
 
             # This skips select and aggregate ops
             if queryName == "read":
-                print("successful read abort")
+                
                 continue
 
             # This undos insert with a delete
             if queryName == "insert":    
                 #Query(table).delete(args[0])
-                print("successful insert abort")
+                
                 continue
 
             # This undos update with an update of the original values
             if queryName == "update":    
                 #Query(table).update(args[0], originalVal)
-                print("successful update abort")
+                
                 continue
 
             # This undos delete  (not done yet)
             if queryName == "delete":
-                print("successful delete abort")
+                
                 continue
 
 
@@ -114,7 +111,6 @@ class Transaction:
 
     def commit(self):
         # TODO: commit to database
-        #print("query committed")
 
         # Emptying out the stacks
         while not self.queryStack.empty():

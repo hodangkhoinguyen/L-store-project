@@ -419,6 +419,60 @@ class Query:
                     
         return result
 
+    def revert_insert(self, rid):
+        
+        if rid == None or not rid in self.table.page_directory:
+            return False
+        
+        location = self.table.page_directory[rid]
+        index_in_bufferpool = self.table.db.use_bufferpool(self.table.page_range_list[location[0]])
+        if (index_in_bufferpool == -1):
+            return False
+        
+        self.table.db.dirty[index_in_bufferpool] = True
+        
+        
+        """
+        location: <- list of informations
+        [0] page_range
+        [1] base_page
+        [2] slot        
+        """
+        self.table.page_range_list[location[0]].base_page_list[location[1]][RID_COLUMN][location[2]] = -1        
+        self.table.page_directory.pop(rid)
+    
+    def revert_update(self, rid, *columns):
+        if (rid == None or not rid in self.table.page_directory):
+            return False
+        
+        location = self.table.page_directory[rid]
+        index_in_bufferpool = self.table.db.use_bufferpool(self.table.page_range_list[location[0]])
+        if (index_in_bufferpool == -1):
+            return False
+        
+        self.table.db.dirty[index_in_bufferpool] = True
+        
+        base_page = self.table.page_range_list[location[0]].base_page_list[location[1]]
+        base_page[INDIRECTION_COLUMN][location[2]] = columns[0]
+        base_page[TIMESTAMP_COLUMN][location[2]] = columns[1]
+        base_page[SCHEMA_ENCODING_COLUMN][location[2]] = columns[2]
+            
+        return True 
+           
+    def revert_delete(self, rid, location):
+        if (rid == None or not rid in self.table.page_directory):
+            return False
+        
+        location = self.table.page_directory[rid]
+        index_in_bufferpool = self.table.db.use_bufferpool(self.table.page_range_list[location[0]])
+        if (index_in_bufferpool == -1):
+            return False
+        
+        self.table.db.dirty[index_in_bufferpool] = True
+        
+        base_page = self.table.page_range_list[location[0]].base_page_list[location[1]]
+        base_page[RID_COLUMN][location[2]] = rid
+        self.table.page_directory[rid] = [location[0], location[1], location[2]]
     """
     incremenets one column of the record
     this implementation should work if your select and update queries already work
