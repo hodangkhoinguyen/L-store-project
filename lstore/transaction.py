@@ -86,24 +86,22 @@ class Transaction:
 
             # This skips select and aggregate ops
             if queryName == "read":
-                
                 continue
 
             # This undos insert with a delete
             if queryName == "insert":    
-                #Query(table).delete(args[0])
-                
+                Query(table).revert_insert(originalRID[0])
                 continue
 
             # This undos update with an update of the original values
             if queryName == "update":    
-                #Query(table).update(args[0], originalVal)
-                
+                Query(table).revert_update(originalRID[0], originalVal)
+                print(originalRID, originalVal)
                 continue
 
             # This undos delete  (not done yet)
             if queryName == "delete":
-                
+                Query(table).revert_delete(originalRID[0], page_directory)
                 continue
 
 
