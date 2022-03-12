@@ -105,6 +105,7 @@ class Transaction:
             # This undos update with an update of the original values
             if queryName == "update":    
                 Query(table).revert_update(originalRID[0], originalVal)
+                print(originalRID, originalVal)
                 continue
 
             # This undos delete  (not done yet)
@@ -117,7 +118,6 @@ class Transaction:
 
     def commit(self):
         while self.queryStack.empty() == False:
-            #print("in loop")
             (queryName, args, originalRID, table, originalVal, page_directory) = self.queryStack.get()
             lock = table.lock[originalRID[0]]
             if (type(lock) == Lock()):
