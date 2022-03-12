@@ -63,7 +63,7 @@ class Transaction:
             if len(args) == 5:
                 queryName = "insert"
                 originalRID = Query(table).returnRID(args[0])
-                if not originalRID == None and originalRID[0] in table.page_directory:
+                if not originalRID == None:
                     page_directory = table.page_directory[originalRID[0]]
             
             # If op fails, it aborts
