@@ -1,15 +1,11 @@
 from msilib import schema
-from threading import Lock, RLock
-import threading
-from lstore.table import Table, Record, PageRange, INDIRECTION_COLUMN, RID_COLUMN, TIMESTAMP_COLUMN, SCHEMA_ENCODING_COLUMN
+from lstore.table import Table, Record, PageRange, INDIRECTION_COLUMN, RID_COLUMN, TIMESTAMP_COLUMN, SCHEMA_ENCODING_COLUMN, RepeatedTimer
 from lstore.index import Index
 from lstore.page import Page
+from threading import Timer
 import time
-class CustomRLock(threading._PyRLock):
 
-    @property
-    def locked(self):
-        return bool(self._count)
+
 class Query:
     """
     # Creates a Query object that can perform different queries on the specified table 
@@ -20,6 +16,7 @@ class Query:
 
     def __init__(self, table: Table):
         self.table = table
+        self.updates = 0
         pass
 
     """
@@ -35,29 +32,6 @@ class Query:
         if rid == None:
             return False
         rid = rid[0]
-        lock = self.table.lock[rid]
-        if lock != None:
-            if type(lock) == type(Lock()):
-                if lock.locked():
-                    try:
-                        lock.release()
-                    except:
-                        return False
-                    lock.acquire()
-                else:
-                    lock.acquire()
-            else:
-                if (lock.locked):
-                    return False
-                else:
-                    self.table.lock[rid] = Lock()
-                    lock = self.table.lock[rid]
-                    lock.acquire()
-        else:
-            self.table.lock[rid] = Lock()
-            lock = self.table.lock[rid]
-            lock.acquire()
-                
         location = self.table.page_directory[rid]
         index_in_bufferpool = self.table.db.use_bufferpool(self.table.page_range_list[location[0]])
         if (index_in_bufferpool == -1):
@@ -100,8 +74,7 @@ class Query:
         index = 4
 
         rid = 'b' + str(self.table.counter_base)
-        if (page_range_size == 0 \
-            or (not self.table.page_range_list[page_range_size - 1].has_capacity())):
+        if (page_range_size == 0 or (not self.table.page_range_list[page_range_size - 1].has_capacity())):
             new_page_range = PageRange()
             new_page_range.path = self.table.name + " page_range " + str(len(self.table.page_range_list) )            
             self.table.page_range_list.append(new_page_range)
@@ -163,8 +136,6 @@ class Query:
         self.table.index.insert(key_column, primary_key, rid)
         self.table.counter_base += 1
         self.table.page_directory[rid] = location
-        self.table.lock[rid] = Lock()
-        self.table.lock[rid].acquire()
         return True
 
     """
@@ -177,26 +148,7 @@ class Query:
     # Assume that select will never be called on a key that doesn't exist
     """
     def currentValues(self, primary_key):   
-        rid_list = self.table.index.locate(self.table.key, primary_key)
-        
-        if (rid_list == None):
-            return False
-        
-        result = []
-        
-        for rid in rid_list:
-            if (rid in self.table.page_directory):
-                location = self.table.page_directory[rid]
-                base_page = self.table.page_range_list[location[0]].base_page_list[location[1]]
-                indirection = base_page[INDIRECTION_COLUMN][location[2]]
-                timestamp = base_page[TIMESTAMP_COLUMN][location[2]]
-                schema_encoding = base_page[SCHEMA_ENCODING_COLUMN][location[2]]
-            
-                result = [indirection, rid, timestamp, schema_encoding]
-                for i in range(self.table.num_columns):
-                    result.append(base_page[i+4].read(location[2]))                   
-                    
-        return result
+        return self.select(primary_key, self.table.key, [1]*self.table.num_columns)
 
         # Only for use with the transaction class for now. Retrieves the rid of a record that is affected by transaction
     def returnRID(self, primary_key):
@@ -213,27 +165,10 @@ class Query:
         
         for rid in rid_list:
             if (rid in self.table.page_directory):
-                lock = self.table.lock[rid]
-                if lock != None:
-                    if type(lock) == type(Lock()) and lock.locked():
-                        try:
-                            lock.release()
-                        except:
-                            return []
-                        lock.acquire()
-                    else:
-                        self.table.lock[rid] = CustomRLock()
-                        lock = self.table.lock[rid]
-                        lock.acquire()
-                else:
-                    self.table.lock[rid] = CustomRLock()
-                    lock = self.table.lock[rid]
-                    lock.acquire()
-                       
                 location = self.table.page_directory[rid]
                 index_in_bufferpool = self.table.db.use_bufferpool(self.table.page_range_list[location[0]])
                 if (index_in_bufferpool == -1):
-                    return []
+                    return False
                 
                 self.table.db.dirty[index_in_bufferpool] = True
                 base_page = self.table.page_range_list[location[0]].base_page_list[location[1]]
@@ -271,30 +206,6 @@ class Query:
             return False
         
         rid = rid_list[0]
-        
-        lock = self.table.lock[rid]
-        if lock != None:
-            if type(lock) == type(Lock()):
-                if lock.locked():
-                    try:
-                        lock.release()
-                    except:
-                        return False
-                    lock.acquire()
-                else:
-                    lock.acquire()
-            else:
-                if (lock.locked):
-                    return False
-                else:
-                    self.table.lock[rid] = Lock()
-                    lock = self.table.lock[rid]
-                    lock.acquire()
-        else:
-            self.table.lock[rid] = Lock()
-            lock = self.table.lock[rid]
-            lock.acquire()
-            
         location = self.table.page_directory[rid]
         index_in_bufferpool = self.table.db.use_bufferpool(self.table.page_range_list[location[0]])
         if (index_in_bufferpool == -1):
@@ -356,10 +267,13 @@ class Query:
                         tail_page[i+4].write(current_page_range.tail_page_list[location_previous_tail[1]][i+4].read(location_previous_tail[2]))  
             schema_encoding = schema          
             tail_page[SCHEMA_ENCODING_COLUMN].append(schema_encoding)
-        current_page_range.recent_tail = rid_tail
+        
         self.table.page_directory[rid_tail] = location_tail        
         base_page[SCHEMA_ENCODING_COLUMN][location[2]] = schema_encoding        
         self.table.counter_tail += 1
+        print(self.updates)
+
+        self.updates+=1
         
         return True
     """
@@ -378,19 +292,8 @@ class Query:
         result = 0
         for i in rid_list:
             rid = i[0]
-            lock = self.table.lock[rid]
             
             if (rid in self.table.page_directory):
-                lock = self.table.lock[rid]
-                if type(lock) == type(Lock()):
-                    try:
-                        lock.release()
-                    except:
-                        return False
-                    self.table.lock[rid] = CustomRLock()
-                    lock = self.table.lock[rid]
-                else:
-                    lock.acquire()
                 location = self.table.page_directory[rid]
                 index_in_bufferpool = self.table.db.use_bufferpool(self.table.page_range_list[location[0]])
                 if (index_in_bufferpool == -1):
@@ -408,62 +311,6 @@ class Query:
                     
         return result
 
-    def revert_insert(self, rid):
-        
-        if rid == None or not rid in self.table.page_directory:
-            return False
-        
-        location = self.table.page_directory[rid]
-        index_in_bufferpool = self.table.db.use_bufferpool(self.table.page_range_list[location[0]])
-        if (index_in_bufferpool == -1):
-            return False
-        
-        self.table.db.dirty[index_in_bufferpool] = True
-        
-        
-        """
-        location: <- list of informations
-        [0] page_range
-        [1] base_page
-        [2] slot        
-        """
-        self.table.page_range_list[location[0]].base_page_list[location[1]][RID_COLUMN][location[2]] = -1        
-        self.table.page_directory.pop(rid)
-    
-    def revert_update(self, rid, *columns):
-        if (rid == None or not rid in self.table.page_directory):
-            return False
-        
-        location = self.table.page_directory[rid]
-        index_in_bufferpool = self.table.db.use_bufferpool(self.table.page_range_list[location[0]])
-        if (index_in_bufferpool == -1):
-            return False
-        
-        self.table.db.dirty[index_in_bufferpool] = True
-        
-        base_page = self.table.page_range_list[location[0]].base_page_list[location[1]]
-        base_page[INDIRECTION_COLUMN][location[2]] = columns[0]
-        base_page[TIMESTAMP_COLUMN][location[2]] = columns[1]
-        base_page[SCHEMA_ENCODING_COLUMN][location[2]] = columns[2]
-            
-        return True 
-           
-    def revert_delete(self, rid, location):
-        if (rid == None or not rid in self.table.page_directory):
-            return False
-        
-        location = self.table.page_directory[rid]
-        index_in_bufferpool = self.table.db.use_bufferpool(self.table.page_range_list[location[0]])
-        if (index_in_bufferpool == -1):
-            return False
-        
-        self.table.db.dirty[index_in_bufferpool] = True
-        
-        base_page = self.table.page_range_list[location[0]].base_page_list[location[1]]
-        base_page[RID_COLUMN][location[2]] = rid
-        self.table.page_directory[rid] = [location[0], location[1], location[2]]
-        
-        pass
     """
     incremenets one column of the record
     this implementation should work if your select and update queries already work
