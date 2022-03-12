@@ -177,7 +177,26 @@ class Query:
     # Assume that select will never be called on a key that doesn't exist
     """
     def currentValues(self, primary_key):   
-        return self.select(primary_key, self.table.key, [1]*self.table.num_columns)
+        rid_list = self.table.index.locate(self.table.key, primary_key)
+        
+        if (rid_list == None):
+            return False
+        
+        result = []
+        
+        for rid in rid_list:
+            if (rid in self.table.page_directory):
+                location = self.table.page_directory[rid]
+                base_page = self.table.page_range_list[location[0]].base_page_list[location[1]]
+                indirection = base_page[INDIRECTION_COLUMN][location[2]]
+                timestamp = base_page[TIMESTAMP_COLUMN][location[2]]
+                schema_encoding = base_page[SCHEMA_ENCODING_COLUMN][location[2]]
+            
+                result = [indirection, rid, timestamp, schema_encoding]
+                for i in range(self.table.num_columns):
+                    result.append(base_page[i+4].read(location[2]))                   
+                    
+        return result
 
         # Only for use with the transaction class for now. Retrieves the rid of a record that is affected by transaction
     def returnRID(self, primary_key):
